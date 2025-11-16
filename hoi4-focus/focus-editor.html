@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>国策树可视化编辑器（拖拽 + 前置连线）</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+      background: #e3f5d4;
+      overflow: hidden;
+    }
+
+    /* 顶部工具栏 */
+    #toolbar {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #cfe6b8;
+      border-bottom: 2px solid #9ccd87;
+      font-size: 14px;
+    }
+
+    .btn {
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid #7ba35c;
+      background: linear-gradient(to bottom,#f8fff0,#d6e9c3);
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .btn:hover { filter: brightness(1.03); }
+
+    /* 主体：左画布 + 右编辑面板 */
+    #main {
+      display: flex;
+      height: calc(100vh - 48px);
+      overflow: hidden;
+    }
+
+    #canvas-wrapper {
+      flex: 1;
+      position: relative;
+      overflow: auto;
+      background: #d9edc6;
+      border-right: 1px solid #aacd8e;
+    }
+
+    #canvas-inner {
+      position: relative;
+      width: 2400px;
+      height: 1600px;
+      margin: 20px;
+      background: #d1e6c0;
+      border: 2px solid #a8c992;
+      border-radius: 6px;
+    }
+
+    #link-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    #node-layer {
+      position: absolute;
+      inset: 0;
+    }
+
+    .node {
+      position: absolute;
+      width: 220px;
+      height: 110px;
+      padding: 6px 8px;
+      background: #34b451;
+      border: 2px solid #1a7d31;
+      border-radius: 6px;
+      color: #fff;
+      cursor: move;
+      user-select: none;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.25);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: box-shadow 0.1s ease, transform 0.1s ease;
+    }
+    .node.selected {
+      box-shadow: 0 0 0 2px #ffeb3b, 0 4px 10px rgba(0,0,0,0.4);
+      transform: translateY(-2px);
+    }
+    .node-header {
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .node-sub {
+      font-size: 11px;
+      opacity: 0.85;
+      margin-bottom: 2px;
+    }
+    .node-footer {
+      font-size: 11px;
+      opacity: 0.8;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* 右侧编辑面板 */
+    #editor-panel {
+      width: 320px;
+      padding: 10px 12px;
+      background: #f8fff0;
+      font-size: 13px;
+    }
+    #editor-panel h3 {
+      margin: 2px 0 10px;
+      font-size: 15px;
+    }
+    .field {
+      margin-bottom: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .field label {
+      font-size: 12px;
+      color: #555;
+    }
+    .field input,
+    .field textarea,
+    .field select {
+      font-size: 13px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      border: 1px solid #9bb48a;
+      font-family: inherit;
+    }
+    .field textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+    #no-selection {
+      color: #777;
+      margin-top: 40px;
+      font-size: 13px;
+    }
+
+    /* SVG 连线 */
+    .dep-link {
+      stroke: #3f6f36;
+      stroke-width: 2;
+      fill: none;
+    }
+    .dep-link-arrow {
+      stroke: #3f6f36;
+      fill: #3f6f36;
+    }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button class="btn" id="btn-add">➕ 添加国策</button>
+  <button class="btn" id="btn-auto-layout">↕ 简单自动布局</button>
+  <button class="btn" id="btn-save-local">💾 保存到番茄钟配置</button>
+  <button class="btn" id="btn-export">📤 导出节点 JSON</button>
+  <button class="btn" id="btn-import">📥 导入节点 JSON</button>
+  <input id="file-input" type="file" accept="application/json" style="display:none;">
+</div>
+
+<div id="main">
+  <div id="canvas-wrapper">
+    <div id="canvas-inner">
+      <svg id="link-layer">
+        <defs>
+          <marker id="arrow-head" viewBox="0 0 10 10" refX="8" refY="5"
+                  markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="dep-link-arrow"></path>
+          </marker>
+        </defs>
+        <g id="links-group"></g>
+      </svg>
+      <div id="node-layer"></div>
+    </div>
+  </div>
+
+  <aside id="editor-panel">
+    <h3>国策编辑器</h3>
+    <div id="no-selection">在左侧双击空白添加国策，或者点击已有国策进行编辑。</div>
+    <div id="editor-fields" style="display:none;">
+      <div class="field">
+        <label for="f-id">ID（只读，可用于前置）</label>
+        <input id="f-id" type="text" readonly>
+      </div>
+      <div class="field">
+        <label for="f-title">名称（title）</label>
+        <input id="f-title" type="text">
+      </div>
+      <div class="field">
+        <label for="f-branch">支线（branch）</label>
+        <input id="f-branch" type="text" placeholder="例如：主线 / 写作线 / 健康线">
+      </div>
+      <div class="field">
+        <label for="f-minutes">默认时长（分钟）</label>
+        <input id="f-minutes" type="number" min="1" value="25">
+      </div>
+      <div class="field">
+        <label for="f-desc">说明（desc）</label>
+        <textarea id="f-desc" placeholder="这里写国策说明，将来可以显示在你的番茄钟里"></textarea>
+      </div>
+      <div class="field">
+        <label for="f-deps">前置国策（按 Ctrl/⌘ 多选）</label>
+        <select id="f-deps" multiple size="6"></select>
+      </div>
+      <button class="btn" id="btn-save-node">💾 保存当前国策</button>
+    </div>
+  </aside>
+</div>
+
+<script>
+  const CONFIG_KEY = "focus_tree_custom_config_v1";
+
+  const NODE_W = 220;
+  const NODE_H = 110;
+
+  // 节点格式：{ id,title,branch,minutes,desc,x,y,dependsOn[] }
+  let nodes = [];
+  let selectedId = null;
+
+  const canvasInner   = document.getElementById("canvas-inner");
+  const nodeLayer     = document.getElementById("node-layer");
+  const linksGroup    = document.getElementById("links-group");
+
+  const btnAdd        = document.getElementById("btn-add");
+  const btnAutoLayout = document.getElementById("btn-auto-layout");
+  const btnExport     = document.getElementById("btn-export");
+  const btnImport     = document.getElementById("btn-import");
+  const btnSaveLocal  = document.getElementById("btn-save-local");
+  const fileInput     = document.getElementById("file-input");
+
+  const noSelEl       = document.getElementById("no-selection");
+  const editorFields  = document.getElementById("editor-fields");
+  const fId           = document.getElementById("f-id");
+  const fTitle        = document.getElementById("f-title");
+  const fBranch       = document.getElementById("f-branch");
+  const fMinutes      = document.getElementById("f-minutes");
+  const fDesc         = document.getElementById("f-desc");
+  const fDeps         = document.getElementById("f-deps");
+  const btnSaveNode   = document.getElementById("btn-save-node");
+
+  /********** 创建节点 **********/
+  function createNode(initialX = 200, initialY = 100) {
+    const id = "f_" + Date.now().toString(36) + "_" + Math.floor(Math.random()*1000);
+    const node = {
+      id,
+      title: "新国策",
+      branch: "默认线",
+      minutes: 25,
+      desc: "",
+      x: initialX,
+      y: initialY,
+      dependsOn: []
+    };
+    nodes.push(node);
+    renderAll();
+    selectNode(id);
+  }
+
+  btnAdd.addEventListener("click", () => {
+    createNode(200 + nodes.length * 40, 120 + nodes.length * 20);
+  });
+
+  canvasInner.addEventListener("dblclick", (e) => {
+    if (e.target !== canvasInner) return;
+    const rect = canvasInner.getBoundingClientRect();
+    const x = e.clientX - rect.left - NODE_W / 2;
+    const y = e.clientY - rect.top - NODE_H / 2;
+    createNode(x, y);
+  });
+
+  /********** 渲染 **********/
+  function renderAll() {
+    renderNodes();
+    renderLinks();
+  }
+
+  function renderNodes() {
+    nodeLayer.innerHTML = "";
+    nodes.forEach(node => {
+      const div = document.createElement("div");
+      div.className = "node";
+      if (node.id === selectedId) div.classList.add("selected");
+      div.style.left = node.x + "px";
+      div.style.top  = node.y + "px";
+      div.dataset.id = node.id;
+
+      div.innerHTML = `
+        <div class="node-header">${escapeHtml(node.title || "未命名国策")}</div>
+        <div class="node-sub">${escapeHtml(node.branch || "")}</div>
+        <div class="node-footer">
+          <span>${node.minutes || 25} 分钟</span>
+          <span>${node.dependsOn.length ? "前置：" + node.dependsOn.length : ""}</span>
+        </div>
+      `;
+
+      div.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectNode(node.id);
+      });
+
+      enableDrag(div, node);
+      nodeLayer.appendChild(div);
+    });
+  }
+
+  function enableDrag(el, node) {
+    let startX=0, startY=0, origX=0, origY=0, dragging=false;
+
+    el.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      startX = e.clientX;
+      startY = e.clientY;
+      origX = node.x;
+      origY = node.y;
+      dragging = true;
+
+      const move = ev => {
+        if (!dragging) return;
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        node.x = origX + dx;
+        node.y = origY + dy;
+        el.style.left = node.x + "px";
+        el.style.top  = node.y + "px";
+        renderLinks();
+      };
+      const up = () => {
+        dragging = false;
+        document.removeEventListener("mousemove", move);
+        document.removeEventListener("mouseup", up);
+      };
+
+      document.addEventListener("mousemove", move);
+      document.addEventListener("mouseup", up);
+    });
+  }
+
+  function renderLinks() {
+    linksGroup.innerHTML = "";
+    nodes.forEach(child => {
+      child.dependsOn.forEach(pid => {
+        const parent = nodes.find(n => n.id === pid);
+        if (!parent) return;
+        const x1 = parent.x + NODE_W / 2;
+        const y1 = parent.y + NODE_H;
+        const x2 = child.x + NODE_W / 2;
+        const y2 = child.y;
+        const midY = (y1 + y2) / 2;
+        const d = `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
+        const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+        path.setAttribute("d", d);
+        path.setAttribute("class", "dep-link");
+        path.setAttribute("marker-end", "url(#arrow-head)");
+        linksGroup.appendChild(path);
+      });
+    });
+  }
+
+  /********** 选择 + 编辑面板 **********/
+  function selectNode(id) {
+    selectedId = id;
+    renderNodes();
+    updateEditorPanel();
+  }
+
+  function updateEditorPanel() {
+    const node = nodes.find(n => n.id === selectedId);
+    if (!node) {
+      noSelEl.style.display = "block";
+      editorFields.style.display = "none";
+      return;
+    }
+    noSelEl.style.display = "none";
+    editorFields.style.display = "block";
+
+    fId.value      = node.id;
+    fTitle.value   = node.title || "";
+    fBranch.value  = node.branch || "";
+    fMinutes.value = node.minutes || 25;
+    fDesc.value    = node.desc || "";
+
+    fDeps.innerHTML = "";
+    nodes.forEach(n => {
+      if (n.id === node.id) return;
+      const opt = document.createElement("option");
+      opt.value = n.id;
+      opt.textContent = `${n.title || "未命名"} (${n.id})`;
+      if (node.dependsOn.includes(n.id)) opt.selected = true;
+      fDeps.appendChild(opt);
+    });
+  }
+
+  btnSaveNode.addEventListener("click", () => {
+    const node = nodes.find(n => n.id === selectedId);
+    if (!node) return;
+    node.title   = fTitle.value.trim() || "未命名国策";
+    node.branch  = fBranch.value.trim() || "默认线";
+    node.minutes = parseInt(fMinutes.value,10) || 25;
+    node.desc    = fDesc.value.trim();
+    node.dependsOn = Array.from(fDeps.selectedOptions).map(o => o.value);
+    renderAll();
+    selectNode(node.id);
+  });
+
+  canvasInner.addEventListener("click", e => {
+    if (e.target === canvasInner) {
+      selectedId = null;
+      renderNodes();
+      updateEditorPanel();
+    }
+  });
+
+  /********** 导出 / 导入（节点格式） **********/
+  btnExport.addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(nodes,null,2)], {type:"application/json"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = "focus-nodes.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  btnImport.addEventListener("click", () => {
+    fileInput.value = "";
+    fileInput.click();
+  });
+
+  fileInput.addEventListener("change", e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!Array.isArray(data)) {
+          alert("JSON 根节点应为数组");
+          return;
+        }
+        nodes = data.map(d => ({
+          id: d.id || ("f_" + Math.random().toString(36).slice(2)),
+          title: d.title || "未命名国策",
+          branch: d.branch || "默认线",
+          minutes: Number(d.minutes) || 25,
+          desc: d.desc || "",
+          x: Number(d.x) || 100,
+          y: Number(d.y) || 100,
+          dependsOn: Array.isArray(d.dependsOn) ? d.dependsOn : []
+        }));
+        selectedId = null;
+        renderAll();
+        updateEditorPanel();
+      } catch (err) {
+        console.error(err);
+        alert("解析 JSON 失败");
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  /********** 保存到番茄钟配置（localStorage） **********/
+  btnSaveLocal.addEventListener("click", () => {
+    const focuses = nodes.map(n => {
+      const row = Math.max(1, Math.round((n.y - 60) / 180) + 1);
+      const col = Math.max(1, Math.round((n.x - 120) / 260) + 1);
+      return {
+        id: n.id,
+        branch: n.branch || "默认线",
+        title: n.title || "未命名国策",
+        defaultMinutes: n.minutes || 25,
+        dependsOn: Array.isArray(n.dependsOn) ? n.dependsOn : [],
+        row,
+        col,
+        desc: n.desc || ""
+      };
+    });
+    try {
+      localStorage.setItem(CONFIG_KEY, JSON.stringify(focuses));
+      alert("已保存到 localStorage，回到番茄钟页面刷新即可生效。");
+    } catch (e) {
+      console.error(e);
+      alert("保存失败，可能是浏览器禁止 localStorage。");
+    }
+  });
+
+  /********** 从番茄钟配置读取，转成节点 **********/
+  function loadFromPomodoroConfig() {
+    try {
+      const raw = localStorage.getItem(CONFIG_KEY);
+      if (!raw) return false;
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return false;
+
+      nodes = arr.map(f => {
+        const col = Number(f.col) || 1;
+        const row = Number(f.row) || 1;
+        const x = 120 + (col-1) * 260;
+        const y = 60  + (row-1) * 180;
+        return {
+          id: f.id || ("f_" + Math.random().toString(36).slice(2)),
+          title: f.title || "未命名国策",
+          branch: f.branch || "默认线",
+          minutes: Number(f.defaultMinutes) || 25,
+          desc: f.desc || "",
+          x, y,
+          dependsOn: Array.isArray(f.dependsOn) ? f.dependsOn : []
+        };
+      });
+      return true;
+    } catch (e) {
+      console.warn("读取番茄钟配置失败：", e);
+      return false;
+    }
+  }
+
+  /********** 简单自动布局（按依赖层级） **********/
+  btnAutoLayout.addEventListener("click", () => {
+    if (!nodes.length) return;
+    const level = {};
+    function getLevel(id, stack=new Set()) {
+      if (level[id] != null) return level[id];
+      const node = nodes.find(n => n.id===id);
+      if (!node || !node.dependsOn.length) {
+        level[id] = 0; return 0;
+      }
+      if (stack.has(id)) { level[id]=0; return 0; }
+      stack.add(id);
+      let lv = 0;
+      node.dependsOn.forEach(pid => {
+        lv = Math.max(lv, getLevel(pid,stack)+1);
+      });
+      stack.delete(id);
+      level[id] = lv; return lv;
+    }
+    nodes.forEach(n => getLevel(n.id));
+
+    const levels = {};
+    Object.keys(level).forEach(id => {
+      const lv = level[id];
+      if (!levels[lv]) levels[lv]=[];
+      levels[lv].push(nodes.find(n=>n.id===id));
+    });
+
+    const colGap = 260, rowGap = 180, baseX = 120, baseY = 60;
+    Object.keys(levels).forEach(k => {
+      const lv = Number(k);
+      levels[lv].forEach((node, i) => {
+        node.x = baseX + i * colGap;
+        node.y = baseY + lv * rowGap;
+      });
+    });
+    renderAll();
+    if (selectedId) selectNode(selectedId);
+  });
+
+  /********** 小工具 **********/
+  function escapeHtml(str){
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  /********** 初始化 **********/
+  function init() {
+    const ok = loadFromPomodoroConfig();
+    if (!ok) {
+      nodes = [
+        {
+          id: "f_main_1",
+          title: "主线起步",
+          branch: "主线",
+          minutes: 25,
+          desc: "今天最核心的一件主线工作，从这里开始。",
+          x: 200, y: 80,
+          dependsOn: []
+        },
+        {
+          id: "f_main_2",
+          title: "主线推进",
+          branch: "主线",
+          minutes: 50,
+          desc: "在已有基础上推进一大步。",
+          x: 200, y: 260,
+          dependsOn: ["f_main_1"]
+        },
+        {
+          id: "f_write_1",
+          title: "写作：摘录与笔记",
+          branch: "写作线",
+          minutes: 25,
+          desc: "文献摘录、整理阅读笔记。",
+          x: 520, y: 80,
+          dependsOn: []
+        },
+        {
+          id: "f_write_2",
+          title: "写作：段落草稿",
+          branch: "写作线",
+          minutes: 40,
+          desc: "结合笔记写出一两个完整段落。",
+          x: 520, y: 260,
+          dependsOn: ["f_write_1"]
+        }
+      ];
+    }
+    renderAll();
+  }
+
+  init();
+</script>
+</body>
+</html>

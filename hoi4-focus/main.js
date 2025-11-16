@@ -1,15 +1,15 @@
 /************** 0. 默认配置 + 配置持久化 **************/
 const DEFAULT_FOCUSES = [
-  { id: "f_main_1", branch: "主线",   title: "今天主线起步", defaultMinutes: 25, dependsOn: [],            row: 1, col: 3, desc: "今天主线的大方向，列出要完成的核心块。" },
-  { id: "f_main_2", branch: "主线",   title: "主线推进",     defaultMinutes: 50, dependsOn: ["f_main_1"],  row: 2, col: 3, desc: "继续推进主线任务，可以拆分为两个番茄。" },
-  { id: "f_main_3", branch: "主线",   title: "主线收尾",     defaultMinutes: 25, dependsOn: ["f_main_2"],  row: 3, col: 3, desc: "主线收尾、检查、整理输出。" },
-  { id: "f_write_1", branch: "写作线", title: "笔记与摘录",   defaultMinutes: 25, dependsOn: [],            row: 1, col: 1, desc: "读文献/材料，用这一块做摘录和要点笔记。" },
-  { id: "f_write_2", branch: "写作线", title: "段落起草",     defaultMinutes: 25, dependsOn: ["f_write_1"], row: 2, col: 1, desc: "根据前一国策的笔记起草一个或多个段落。" },
-  { id: "f_write_3", branch: "写作线", title: "修改与打磨",   defaultMinutes: 25, dependsOn: ["f_write_2"], row: 3, col: 1, desc: "重读、修改、统一语气和结构。" },
-  { id: "f_health_1", branch: "健康线", title: "拉伸与活动",   defaultMinutes: 10, dependsOn: [],            row: 1, col: 5, desc: "短暂拉伸、走动、喝水，放松眼睛和肩颈。" },
-  { id: "f_health_2", branch: "健康线", title: "专注运动块",   defaultMinutes: 30, dependsOn: ["f_health_1"],row: 2, col: 5, desc: "完整一段运动，比如慢跑、力量训练等。" },
-  { id: "f_life_1", branch: "生活线",  title: "环境整理",     defaultMinutes: 15, dependsOn: [],            row: 2, col: 2, desc: "整理桌面/房间，扔垃圾、收拾杂物。" },
-  { id: "f_life_2", branch: "生活线",  title: "补给与采购",   defaultMinutes: 20, dependsOn: ["f_life_1"],  row: 3, col: 2, desc: "采买/下单需要的东西，补充日常物资。" }
+  { id: "f_main_1", branch: "主线",   title: "今天主线起步", defaultMinutes: 25, dependsOn: [],            row: 1, col: 3, desc: "" },
+  { id: "f_main_2", branch: "主线",   title: "主线推进",     defaultMinutes: 50, dependsOn: ["f_main_1"],  row: 2, col: 3, desc: "" },
+  { id: "f_main_3", branch: "主线",   title: "主线收尾",     defaultMinutes: 25, dependsOn: ["f_main_2"],  row: 3, col: 3, desc: "" },
+  { id: "f_write_1", branch: "写作线", title: "笔记与摘录",   defaultMinutes: 25, dependsOn: [],            row: 1, col: 1, desc: "" },
+  { id: "f_write_2", branch: "写作线", title: "段落起草",     defaultMinutes: 25, dependsOn: ["f_write_1"], row: 2, col: 1, desc: "" },
+  { id: "f_write_3", branch: "写作线", title: "修改与打磨",   defaultMinutes: 25, dependsOn: ["f_write_2"], row: 3, col: 1, desc: "" },
+  { id: "f_health_1", branch: "健康线", title: "拉伸与活动",   defaultMinutes: 10, dependsOn: [],            row: 1, col: 5, desc: "" },
+  { id: "f_health_2", branch: "健康线", title: "专注运动块",   defaultMinutes: 30, dependsOn: ["f_health_1"],row: 2, col: 5, desc: "" },
+  { id: "f_life_1", branch: "生活线",  title: "环境整理",     defaultMinutes: 15, dependsOn: [],            row: 2, col: 2, desc: "" },
+  { id: "f_life_2", branch: "生活线",  title: "补给与采购",   defaultMinutes: 20, dependsOn: ["f_life_1"],  row: 3, col: 2, desc: "" }
 ];
 
 const CONFIG_KEY  = "focus_tree_custom_config_v1";
@@ -18,6 +18,7 @@ const THEME_KEY   = "focus_tree_theme_v1";
 
 let focuses = [];
 
+/** 加载 / 保存配置（国策结构） */
 function loadConfig() {
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
@@ -36,7 +37,7 @@ function loadConfig() {
       defaultMinutes: Number(f.defaultMinutes) || 25,
       row: Number(f.row) || 1,
       col: Number(f.col) || 1,
-      desc: typeof f.desc === "string" ? f.desc : ""
+      desc: f.desc || ""
     }));
   } catch (e) {
     console.warn("加载自定义配置失败，使用默认：", e);
@@ -96,7 +97,7 @@ function saveTheme() {
   }
 }
 
-/************** 1. 状态持久化（完成情况 + 图标） **************/
+/************** 1. 状态持久化（完成情况 + 图标 + sessions） **************/
 let state = {
   completed: [],
   sessions: {},
@@ -125,7 +126,7 @@ function saveState() {
   }
 }
 
-/************** 1.1 顶部总数统计 **************/
+/************** 1.1 顶部全局统计 **************/
 const totalPomodorosEl        = document.getElementById("total-pomodoros");
 const totalCompletedFocusesEl = document.getElementById("total-completed-focuses");
 
@@ -143,7 +144,6 @@ function updateGlobalStats() {
 /************** 2. 渲染国策树 **************/
 const treeContainer = document.getElementById("tree-container");
 let selectedFocusId = null;
-let currentTimer = null; // 提前声明，renderTree 会用到
 
 function checkUnlocked(focus) {
   if (!focus.dependsOn || focus.dependsOn.length === 0) return true;
@@ -200,7 +200,7 @@ function renderTree() {
   });
 }
 
-/************** 3. 信息栏 **************/
+/************** 3. 信息栏 DOM **************/
 const infoPanel    = document.getElementById("info-panel");
 const infoEmptyEl  = document.getElementById("info-empty");
 const infoContentEl= document.getElementById("info-content");
@@ -212,10 +212,10 @@ const infoCountEl  = document.getElementById("info-count");
 const infoTotalEl  = document.getElementById("info-total");
 const infoDescEl   = document.getElementById("info-desc");
 
-const btnStartFocus= document.getElementById("btn-start-focus");
-const btnUploadIcon= document.getElementById("btn-upload-icon");
-const btnClearIcon = document.getElementById("btn-clear-icon");
-const iconFileInput= document.getElementById("icon-file-input");
+const btnStartFocus  = document.getElementById("btn-start-focus");
+const btnUploadIcon  = document.getElementById("btn-upload-icon");
+const btnClearIcon   = document.getElementById("btn-clear-icon");
+const iconFileInput  = document.getElementById("icon-file-input");
 
 function setSelectedFocus(focusId) {
   selectedFocusId = focusId;
@@ -311,6 +311,8 @@ const btnResetView       = document.getElementById("btn-reset-view");
 const progressContainer  = document.getElementById("time-progress-container");
 const progressBar        = document.getElementById("time-progress-bar");
 const progressLabel      = document.getElementById("time-progress-label");
+
+let currentTimer = null; // { focusId,totalMs,remainingMs,isPaused,intervalId }
 
 function enableTimerButtons(pauseEnabled, resumeEnabled, cancelEnabled) {
   btnPause.disabled  = !pauseEnabled;
@@ -554,6 +556,10 @@ function resetView() {
 
 btnResetView.addEventListener("click", resetView);
 
+// 初始
+resetView();
+
+// 以鼠标为中心缩放
 viewport.addEventListener("wheel", (e) => {
   e.preventDefault();
   const rect = viewport.getBoundingClientRect();
@@ -574,10 +580,11 @@ viewport.addEventListener("wheel", (e) => {
   applyTransform();
 }, { passive: false });
 
+// 拖动画布（只在空白区域按下才开启）
 viewport.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
   const onNode = e.target.closest(".focus-node");
-  if (onNode) return;
+  if (onNode) return; // 点在国策上，不开启平移
   isPanning  = true;
   panStartX  = e.clientX;
   panStartY  = e.clientY;
@@ -602,7 +609,7 @@ window.addEventListener("mouseup", () => {
   }
 });
 
-/************** 7. 配置编辑器逻辑（含说明编辑） **************/
+/************** 7. 表格配置编辑器逻辑 **************/
 const configOverlay    = document.getElementById("config-overlay");
 const configTableBody  = document.querySelector("#config-table tbody");
 const btnEditConfig    = document.getElementById("btn-edit-config");
@@ -620,7 +627,7 @@ btnConfigClose.addEventListener("click", () => {
 });
 
 btnConfigReset.addEventListener("click", () => {
-  if (!confirm("确定恢复默认布局？（只影响国策位置、名称和说明，不清除完成记录）")) return;
+  if (!confirm("确定恢复默认布局？（只影响国策位置和名字，不清除完成记录）")) return;
   focuses = DEFAULT_FOCUSES.map(f => ({ ...f }));
   saveConfig();
   renderTree();
@@ -650,17 +657,6 @@ function renderConfigEditor() {
       return td;
     }
 
-    function makeTextareaCell(value, onChange, placeholder = "") {
-      const td = document.createElement("td");
-      const ta = document.createElement("textarea");
-      ta.rows = 2;
-      ta.value = value ?? "";
-      if (placeholder) ta.placeholder = placeholder;
-      ta.addEventListener("input", () => onChange(ta.value));
-      td.appendChild(ta);
-      return td;
-    }
-
     const tdId = document.createElement("td");
     tdId.textContent = f.id;
     tr.appendChild(tdId);
@@ -671,10 +667,6 @@ function renderConfigEditor() {
 
     tr.appendChild(
       makeInputCell(f.branch, v => { focuses[index].branch = v; })
-    );
-
-    tr.appendChild(
-      makeTextareaCell(f.desc || "", v => { focuses[index].desc = v; }, "这一国策要干嘛、怎么干")
     );
 
     tr.appendChild(
@@ -706,13 +698,19 @@ function renderConfigEditor() {
       }, "例如：f_main_1,f_write_1")
     );
 
+    tr.appendChild(
+      makeInputCell(f.desc || "", v => {
+        focuses[index].desc = v;
+      }, "说明文本")
+    );
+
     configTableBody.appendChild(tr);
   });
 }
 
 /************** 8. 主题颜色逻辑 **************/
-const themeOverlay = document.getElementById("theme-overlay");
-const btnTheme     = document.getElementById("btn-theme");
+const themeOverlay   = document.getElementById("theme-overlay");
+const btnTheme       = document.getElementById("btn-theme");
 const themeBgInput   = document.getElementById("theme-bg");
 const themeGoldInput = document.getElementById("theme-gold");
 const themeBlueInput = document.getElementById("theme-blue");
