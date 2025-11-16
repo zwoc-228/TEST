@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>国策树番茄钟 · PNG 发光 + 配置编辑器 + 主题颜色 + 进度条</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- 顶部栏 -->
+  <div id="timer-bar">
+    <div class="title">国策树 · 番茄钟（滚轮缩放 / 拖动画布）</div>
+    <div id="timer-status">
+      当前国策：<span id="current-focus-name">无</span><br>
+      倒计时：<span id="countdown-text">未开始</span><br>
+      已完成番茄：<span id="total-pomodoros">0</span> · 已完成国策：<span id="total-completed-focuses">0</span>
+    </div>
+    <div id="timer-controls">
+      <button id="btn-reset-view" class="btn">重置视图</button>
+      <button id="btn-toggle-sidebar" class="btn">隐藏侧栏</button>
+      <button id="btn-theme" class="btn">主题颜色</button>
+      <button id="btn-edit-config" class="btn">编辑配置</button>
+      <button id="btn-pause" class="btn" disabled>暂停</button>
+      <button id="btn-resume" class="btn" disabled>继续</button>
+      <button id="btn-cancel" class="btn" disabled>取消</button>
+    </div>
+  </div>
+
+  <!-- 主体 -->
+  <div id="main">
+    <!-- 左：可平移缩放区域 -->
+    <div id="viewport">
+      <!-- 时间进度条 -->
+      <div id="time-progress-container">
+        <div id="time-progress-bg">
+          <div id="time-progress-bar"></div>
+        </div>
+        <div id="time-progress-label">0%</div>
+      </div>
+
+      <div id="tree-inner">
+        <div id="tree-container"></div>
+      </div>
+    </div>
+
+    <!-- 右：信息栏 -->
+    <aside id="info-panel">
+      <h2>国策详情</h2>
+      <div id="info-empty">点击左侧任意国策查看细节，然后在这里点击「开始国策」。</div>
+      <div id="info-content">
+        <div class="info-row">
+          <span class="label">名称：</span>
+          <span class="value" id="info-title"></span>
+        </div>
+        <div class="info-row">
+          <span class="label">支线：</span>
+          <span class="value" id="info-branch"></span>
+        </div>
+        <div class="info-row">
+          <span class="label">状态：</span>
+          <span class="value" id="info-status"></span>
+        </div>
+        <div class="info-row">
+          <span class="label">默认时长：</span>
+          <span class="value" id="info-default"></span>
+        </div>
+        <div class="info-row">
+          <span class="label">已完成番茄：</span>
+          <span class="value" id="info-count"></span>
+        </div>
+        <div class="info-row">
+          <span class="label">累计时长：</span>
+          <span class="value" id="info-total"></span>
+        </div>
+        <div class="info-desc-block">
+          <span class="label">说明：</span>
+          <div id="info-desc"></div>
+        </div>
+        <div id="info-actions">
+          <button id="btn-start-focus" class="btn">开始国策</button>
+          <button id="btn-upload-icon" class="btn">上传 PNG/JPG 图标</button>
+          <button id="btn-clear-icon" class="btn">清除图标</button>
+          <input id="icon-file-input" type="file" accept="image/*" style="display:none" />
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 完成弹窗 -->
+  <div id="modal-overlay">
+    <div id="modal">
+      <div id="modal-title">国策完成！</div>
+      <div id="modal-message"></div>
+      <button id="modal-ok" class="btn">确认</button>
+    </div>
+  </div>
+
+  <!-- 配置编辑器弹窗 -->
+  <div id="config-overlay">
+    <div id="config-modal">
+      <div class="config-header">
+        <span>国策配置编辑器</span>
+        <button id="config-close" class="btn">×</button>
+      </div>
+      <div class="config-body">
+        <table id="config-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>名称 (title)</th>
+              <th>支线 (branch)</th>
+              <th>说明 (desc)</th>
+              <th>默认时长</th>
+              <th>行 row</th>
+              <th>列 col</th>
+              <th>前置 dependsOn（用逗号分隔 id）</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="config-footer">
+        <button id="config-reset" class="btn">恢复默认</button>
+        <button id="config-save" class="btn">保存并关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主题颜色弹窗 -->
+  <div id="theme-overlay">
+    <div id="theme-modal">
+      <h3>主题颜色设置</h3>
+      <div class="theme-row">
+        <label for="theme-bg">背景主色：</label>
+        <input type="color" id="theme-bg" />
+      </div>
+      <div class="theme-row">
+        <label for="theme-gold">金色系（完成、高亮）：</label>
+        <input type="color" id="theme-gold" />
+      </div>
+      <div class="theme-row">
+        <label for="theme-blue">蓝色系（计时、选中）：</label>
+        <input type="color" id="theme-blue" />
+      </div>
+      <div class="theme-footer">
+        <button id="theme-reset" class="btn">恢复默认主题</button>
+        <button id="theme-close" class="btn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
